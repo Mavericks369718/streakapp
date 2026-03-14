@@ -1,10 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, ScrollView, Dimensions } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const { width } = Dimensions.get('window');
+import { getCompletions } from '../utils/storage';
 
 interface HistoryData {
   dates: string[];
@@ -17,16 +15,26 @@ export default function History() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[History] Component mounted, fetching history...');
     fetchHistory();
   }, []);
 
   const fetchHistory = async () => {
     try {
-      const response = await fetch(`${EXPO_PUBLIC_BACKEND_URL}/api/history`);
-      const data = await response.json();
-      setHistory(data);
+      console.log('[History] Fetching from storage...');
+      const completions = await getCompletions();
+      
+      // Sort dates in descending order (most recent first)
+      const sortedDates = completions.sort((a, b) => b.localeCompare(a));
+      
+      console.log('[History] Sorted dates:', sortedDates);
+      
+      setHistory({
+        dates: sortedDates,
+        total: completions.length,
+      });
     } catch (error) {
-      console.error('Error fetching history:', error);
+      console.error('[History] Error fetching history:', error);
     } finally {
       setIsLoading(false);
     }
@@ -66,6 +74,16 @@ export default function History() {
   if (isLoading) {
     return (
       <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={28} color="#2C3E30" />
+          </TouchableOpacity>
+          <Text style={styles.title}>History</Text>
+          <View style={styles.placeholder} />
+        </View>
         <Text style={styles.loadingText}>Loading history...</Text>
       </View>
     );
@@ -77,7 +95,11 @@ export default function History() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => {
+            console.log('[History] Back button pressed');
+            router.back();
+          }}
+          activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={28} color="#2C3E30" />
         </TouchableOpacity>
@@ -139,7 +161,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#6B7C70',
     textAlign: 'center',
-    marginTop: 100,
+    marginTop: 20,
   },
   header: {
     flexDirection: 'row',

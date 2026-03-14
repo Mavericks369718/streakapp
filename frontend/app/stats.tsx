@@ -2,8 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Text, View, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+import { getCompletions, getTodayString } from '../utils/storage';
 
 interface StreakStats {
   current_streak: number;
@@ -23,16 +22,85 @@ export default function Stats() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    console.log('[Stats] Component mounted, fetching stats...');
     fetchStats();
   }, []);
 
+  const calculateStreak = (completions: string[]): { currentStreak: number; bestStreak: number } => {
+    if (completions.length === 0) {
+      return { currentStreak: 0, bestStreak: 0 };
+    }
+
+    // Sort dates in descending order (most recent first)
+    const sortedDates = completions.sort((a, b) => b.localeCompare(a));
+
+    // Calculate current streak
+    let currentStreak = 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    for (let i = 0; i < sortedDates.length; i++) {
+      const date = new Date(sortedDates[i] + 'T00:00:00');
+      date.setHours(0, 0, 0, 0);
+      
+      const expectedDate = new Date(today);
+      expectedDate.setDate(today.getDate() - i);
+      expectedDate.setHours(0, 0, 0, 0);
+
+      if (date.getTime() === expectedDate.getTime()) {
+        currentStreak++;
+      } else {
+        break;
+      }
+    }
+
+    // Calculate best streak
+    const sortedAsc = completions.sort((a, b) => a.localeCompare(b));
+    let bestStreak = 1;
+    let tempStreak = 1;
+
+    for (let i = 1; i < sortedAsc.length; i++) {
+      const prevDate = new Date(sortedAsc[i - 1] + 'T00:00:00');
+      const currDate = new Date(sortedAsc[i] + 'T00:00:00');
+      
+      const diffTime = currDate.getTime() - prevDate.getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+      if (diffDays === 1) {
+        tempStreak++;
+        bestStreak = Math.max(bestStreak, tempStreak);
+      } else {
+        tempStreak = 1;
+      }
+    }
+
+    bestStreak = Math.max(bestStreak, currentStreak);
+
+    return { currentStreak, bestStreak };
+  };
+
   const fetchStats = async () => {
     try {
-      const response = await fetch(`${EXPO_PUBLIC_BACKEND_URL}/api/streak`);
-      const data = await response.json();
-      setStats(data);
+      console.log('[Stats] Fetching from storage...');
+      const completions = await getCompletions();
+      const today = getTodayString();
+
+      console.log('[Stats] Completions:', completions);
+      console.log('[Stats] Today:', today);
+
+      const { currentStreak, bestStreak } = calculateStreak(completions);
+
+      console.log('[Stats] Current streak:', currentStreak);
+      console.log('[Stats] Best streak:', bestStreak);
+
+      setStats({
+        current_streak: currentStreak,
+        best_streak: bestStreak,
+        total_completions: completions.length,
+        today_completed: completions.includes(today),
+      });
     } catch (error) {
-      console.error('Error fetching stats:', error);
+      console.error('[Stats] Error fetching stats:', error);
     } finally {
       setIsLoading(false);
     }
@@ -41,6 +109,16 @@ export default function Stats() {
   if (isLoading) {
     return (
       <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Ionicons name="arrow-back" size={28} color="#2C3E30" />
+          </TouchableOpacity>
+          <Text style={styles.title}>Your Stats</Text>
+          <View style={styles.placeholder} />
+        </View>
         <Text style={styles.loadingText}>Loading stats...</Text>
       </View>
     );
@@ -52,7 +130,11 @@ export default function Stats() {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => router.back()}
+          onPress={() => {
+            console.log('[Stats] Back button pressed');
+            router.back();
+          }}
+          activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={28} color="#2C3E30" />
         </TouchableOpacity>
@@ -68,13 +150,13 @@ export default function Stats() {
             <Ionicons name="flame" size={40} color="#FFFFFF" />
           </View>
           <Text style={styles.featuredStatNumber}>{stats.current_streak}</Text>
-          <Text style={styles.featuredStatLabel}>Current Streak</Text>
+          <Text style={styles.featuredStatLabel}>Day Streak</Text>
           <Text style={styles.statDescription}>
             {stats.current_streak === 0
               ? 'Start your streak today!'
               : stats.current_streak === 1
               ? 'Keep it going!'
-              : 'Amazing progress!'}
+              : `${stats.current_streak} days in a row!`}
           </Text>
         </View>
 
@@ -137,7 +219,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#6B7C70',
     textAlign: 'center',
-    marginTop: 100,
+    marginTop: 20,
   },
   header: {
     flexDirection: 'row',

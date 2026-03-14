@@ -1,37 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { Text, View, StyleSheet, TouchableOpacity, Animated, Dimensions } from 'react-native';
+import { Text, View, StyleSheet, TouchableOpacity, Animated, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-
-const EXPO_PUBLIC_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
-const { width } = Dimensions.get('window');
+import { getCompletions, saveCompletions, getTodayString } from '../utils/storage';
 
 export default function Index() {
   const router = useRouter();
   const [isCompleted, setIsCompleted] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const scaleAnim = new Animated.Value(1);
-  const rotateAnim = new Animated.Value(0);
+  const [scaleAnim] = useState(new Animated.Value(1));
+  const [rotateAnim] = useState(new Animated.Value(0));
 
-  // Check if today is already completed on mount
   useEffect(() => {
     checkTodayStatus();
   }, []);
 
   const checkTodayStatus = async () => {
     try {
-      const response = await fetch(`${EXPO_PUBLIC_BACKEND_URL}/api/streak`);
-      const data = await response.json();
-      setIsCompleted(data.today_completed);
+      console.log('[Index] Checking today status...');
+      const completions = await getCompletions();
+      const today = getTodayString();
+      
+      console.log('[Index] Platform:', Platform.OS);
+      console.log('[Index] Completions:', completions);
+      console.log('[Index] Today:', today);
+      console.log('[Index] Is today completed:', completions.includes(today));
+      
+      setIsCompleted(completions.includes(today));
     } catch (error) {
-      console.error('Error checking status:', error);
+      console.error('[Index] Error checking status:', error);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleToggleComplete = async () => {
-    if (isCompleted) return; // Already completed, don't allow toggle
+    console.log('[Index] Button clicked! Current completed state:', isCompleted);
+    
+    if (isCompleted) {
+      console.log('[Index] Already completed, ignoring click');
+      return;
+    }
 
     // Animate button press
     Animated.sequence([
@@ -53,18 +62,22 @@ export default function Index() {
     ]).start();
 
     try {
-      const response = await fetch(`${EXPO_PUBLIC_BACKEND_URL}/api/complete`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      console.log('[Index] Saving completion...');
+      const completions = await getCompletions();
+      const today = getTodayString();
       
-      if (response.ok) {
+      console.log('[Index] Current completions before save:', completions);
+      
+      if (!completions.includes(today)) {
+        completions.push(today);
+        await saveCompletions(completions);
+        console.log('[Index] Saved completions:', completions);
         setIsCompleted(true);
+        console.log('[Index] State updated to completed!');
       }
     } catch (error) {
-      console.error('Error marking complete:', error);
+      console.error('[Index] Error saving completion:', error);
+      alert('Failed to save completion. Please try again.');
     }
   };
 
@@ -94,7 +107,7 @@ export default function Index() {
         <TouchableOpacity
           style={styles.buttonWrapper}
           onPress={handleToggleComplete}
-          activeOpacity={0.8}
+          activeOpacity={0.7}
           disabled={isCompleted}
         >
           <Animated.View
@@ -126,7 +139,11 @@ export default function Index() {
       <View style={styles.navSection}>
         <TouchableOpacity
           style={styles.navButton}
-          onPress={() => router.push('/stats')}
+          onPress={() => {
+            console.log('[Index] Navigating to stats');
+            router.push('/stats');
+          }}
+          activeOpacity={0.7}
         >
           <View style={styles.navIconContainer}>
             <Ionicons name="stats-chart" size={28} color="#6B7C70" />
@@ -137,7 +154,11 @@ export default function Index() {
 
         <TouchableOpacity
           style={styles.navButton}
-          onPress={() => router.push('/history')}
+          onPress={() => {
+            console.log('[Index] Navigating to history');
+            router.push('/history');
+          }}
+          activeOpacity={0.7}
         >
           <View style={styles.navIconContainer}>
             <Ionicons name="calendar" size={28} color="#6B7C70" />
